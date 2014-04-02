@@ -84,9 +84,10 @@ class S3File(object):
         if self._writereq:
             self.truncate(self.tell())
 
-            headers = {
-                "x-amz-acl":  "private" if self.private else "public-read"
-            }
+            #headers = {
+            #    "x-amz-acl":  "private" if self.private else "public-read"
+            #}
+            headers = {}
 
             if self.content_type:
                 headers["Content-Type"] = self.content_type
@@ -96,8 +97,8 @@ class S3File(object):
                 then = now + datetime.timedelta(self.expiration_days)
                 headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
                 headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
-
-            self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True, version_id=self.version_id)
+            
+            self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
 
     def close(self):
         """ Close the file and write contents to S3.
