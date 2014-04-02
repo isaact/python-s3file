@@ -14,7 +14,7 @@ def s3open(*args, **kwargs):
 
 class S3File(object):
 
-    def __init__(self, url, key=None, secret=None, expiration_days=0, private=False, content_type=None, create=True):
+    def __init__(self, url, key=None, secret=None, expiration_days=0, private=False, content_type=None, create=True, versioning=False):
         from boto.s3.connection import S3Connection
         from boto.s3.key import Key
 
@@ -36,14 +36,30 @@ class S3File(object):
 
         self.name = "s3://" + bucket + self.url.path
 
-        if create:
-            self.bucket = self.client.create_bucket(bucket)
-        else:
-            self.bucket = self.client.get_bucket(bucket, validate=False)
+        self.bucket = self.client.lookup(bucket, validate=False)
+        if self.bucket is None:
+            if create:
+                self.bucket = self.client.create_bucket(bucket)
+                if versioning is True:
+                    bucket.configure_versioning(True)
+            else:
+                raise Exception(self.bucket)
 
         self.key = Key(self.bucket)
         self.key.key = self.url.path.lstrip("/")
+        self.version_id = None
         self.buffer.truncate(0)
+
+    def get_versions(self):
+        return self.bucket.list_versions(prefix=self.key.key)
+    
+    def set_version(self, version_id):
+        self.version_id = version_id 
+        self.buffer.truncate(0)
+
+    @classmethod
+    def delete(cls, url, key, secret, all_versions = False):
+        pass
 
     def __enter__(self):
         return self
@@ -58,7 +74,7 @@ class S3File(object):
         if self._readreq:
                 self.buffer.truncate(0)
                 if self.key.exists():
-                    self.key.get_contents_to_file(self.buffer)
+                    self.key.get_contents_to_file(self.buffer, version_id = self.version_id)
                 self.buffer.seek(0)
                 self._readreq = False
 
@@ -81,7 +97,7 @@ class S3File(object):
                 headers["Expires"] = then.strftime("%a, %d %b %Y %H:%M:%S GMT")
                 headers["Cache-Control"] = 'max-age=%d' % (self.expiration_days * 24 * 3600,)
 
-            self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True)
+            self.key.set_contents_from_file(self.buffer, headers=headers, rewind=True, version_id=self.version_id)
 
     def close(self):
         """ Close the file and write contents to S3.
